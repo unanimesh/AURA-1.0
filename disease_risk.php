@@ -19,7 +19,7 @@ $t = floatval($s["temperature"] ?? 0);
 $h = floatval($s["humidity"] ?? 0);
 $m = floatval($s["moisture_pct"] ?? 0);
 
-$GROQ_KEY = getenv("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") ?: "";   // 🔥 IMPORTANT
+$GROQ_KEY = getenv("") ?: "";   // 🔥 IMPORTANT
 
 // ---------------------------------------
 // FALLBACK MODEL (when no Groq key)

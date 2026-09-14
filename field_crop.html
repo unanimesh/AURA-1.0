@@ -212,9 +212,11 @@ window.latestESP = null;
 
 async function loadField(){
   try{
-    const r = await fetch(API_GET+"?="+Date.now());
+    const r = await fetch(API_GET+"?_="+Date.now());
+    if (!r.ok) throw new Error("API HTTP " + r.status);
     const j = await r.json();
     const d = j.esp || j;
+    if (d.error) throw new Error(d.error);
 
     window.latestESP = d;
 
@@ -274,13 +276,21 @@ async function loadRisk(){
 // IRRIGATION CONTROL
 // -------------------------------
 startMotor.onclick = async()=>{
-  const hp = motorHP.value;
-  await fetch(MOTOR_ON+"?hp="+hp);
-  alert("Motor Started!");
+  try {
+    const hp = motorHP.value;
+    const r = await fetch(MOTOR_ON+"?hp="+encodeURIComponent(hp), {method:"POST"});
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.error || "Motor ON failed");
+    alert("Motor Started!");
+  } catch(e) { alert("Motor error: " + e.message); }
 };
 stopMotor.onclick = async()=>{
-  await fetch(MOTOR_OFF);
-  alert("Motor Stopped!");
+  try {
+    const r = await fetch(MOTOR_OFF, {method:"POST"});
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.error || "Motor OFF failed");
+    alert("Motor Stopped!");
+  } catch(e) { alert("Motor error: " + e.message); }
 };
 
 // -------------------------------

@@ -1,0 +1,4 @@
+AURA Enhanced Package
+Version: 1.1-enhanced
+Database: MariaDB
+Modes: DB-only simulator + ESP8266 ingestion

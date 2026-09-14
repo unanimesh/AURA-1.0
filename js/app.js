@@ -4,7 +4,7 @@
    ========================================================== */
 
 document.addEventListener("DOMContentLoaded", () => {
-  const API_ENDPOINT = "http://172.21.125.29/sensors"; // <-- direct ESP endpoint
+  const API_ENDPOINT = "get_latest.php";
 
   // Safe helper: update text only if element exists
   function setText(id, value) {

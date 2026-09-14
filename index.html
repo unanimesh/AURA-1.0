@@ -282,9 +282,7 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
 
-      const WEATHER_KEY = "1009a9b3a995454c80073905250911";
-      const WEATHER_API = "https://api.weatherapi.com/v1/current.json";
-      const ESP_API = "http://172.21.125.29/sensors";
+      const DATA_API = "get_latest.php";
       const MARKET_API = "market_api.php";
 
       const R = {
@@ -311,30 +309,12 @@
         marketTime: document.getElementById("marketTime")
       };
 
-      // Fetch Weather
-      function loadWeather(lat, lon) {
-        fetch(`${WEATHER_API}?key=${WEATHER_KEY}&q=${lat},${lon}&aqi=yes`)
-          .then(r => r.json())
-          .then(d => {
-            if (!d || !d.current) return;
-
-            R.weatherLocation.textContent = `${d.location.name}, ${d.location.region}`;
-            R.weatherTemp.textContent = `${d.current.temp_c} °C`;
-            R.weatherHum.textContent = `${d.current.humidity}%`;
-            R.weatherCond.textContent = d.current.condition.text;
-            R.weatherWind.textContent = `${d.current.wind_kph} km/h`;
-            R.weatherPressure.textContent = `${d.current.pressure_mb}`;
-            R.weatherAQI.textContent = d.current.air_quality?.pm2_5?.toFixed(1) || "N/A";
-            R.weatherIcon.src = "https:" + d.current.condition.icon;
-          });
+      // Weather + sensor data are served by the PHP API.
+      async function loadDashboardData() {
+        const r = await fetch(DATA_API + "?_=" + Date.now(), { cache: "no-store" });
+        if (!r.ok) throw new Error("API HTTP " + r.status);
+        return await r.json();
       }
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          pos => loadWeather(pos.coords.latitude, pos.coords.longitude),
-          () => loadWeather("Ranchi", "Jharkhand")
-        );
-      } else loadWeather("Ranchi", "Jharkhand");
 
       // Timeout-based fetch
       async function fetchTO(url, timeout = 3000) {
@@ -350,73 +330,66 @@
         }
       }
 
-      // Check ESP Online
-      async function checkESP() {
+      async function loadMarket() {
         try {
-          const r = await fetchTO(ESP_API + "?_=" + Date.now(), 2000);
-          if (!r.ok) throw 0;
-          R.connText.textContent = "Connected ✅";
-          return true;
-        } catch {
-          R.connText.textContent = "Offline ❌";
-          return false;
+          const r = await fetch(MARKET_API + "?state=Jharkhand&district=Ranchi&_=" + Date.now(), { cache: "no-store" });
+          if (!r.ok) throw new Error("Market HTTP " + r.status);
+          const d = await r.json();
+          const mandi = d.mandi || d.mandis?.[0];
+          if (mandi && R.mandiName) R.mandiName.textContent = mandi.name || "--";
+          const crop = d.commodities?.grains?.[0];
+          if (crop && R.topCrop) R.topCrop.textContent = `${crop.name}: ₹${crop.price}`;
+          if (R.marketTime) R.marketTime.textContent = d.timestamp || new Date().toLocaleTimeString();
+        } catch (e) {
+          if (R.mandiName) R.mandiName.textContent = "Unavailable";
+          if (R.topCrop) R.topCrop.textContent = "--";
         }
       }
 
-      // Load Sensor Data
-      async function loadESP() {
-        try {
-          const r = await fetchTO(ESP_API + "?_=" + Date.now(), 3000);
-          const d = await r.json();
-
-          R.fieldMoistMain.textContent = d.moisture_pct + "%";
-          R.motorMain.textContent = d.motor_on ? "ON" : "OFF";
-          R.cropMain.textContent = d.active_crop || d.crop || "--";
-
-          R.capacityMain.textContent = d.capacity_pct + "%";
-          R.fireMain.textContent = d.fire_detected ? "🔥 Fire" : "Safe";
-
-          // Warehouse health score
-          if (typeof d.temperature === "number" && typeof d.humidity === "number") {
-            const score = Math.max(
-              0,
-              100 - Math.abs(d.temperature - 28) * 2 - Math.abs(d.humidity - 60)
-            );
-            R.healthMain.textContent = score + "%";
-          }
-
-          // ⭐ SEND SENSOR DATA TO CHATBOT
-          sendToChatbot({
-            type: "espData",
-            data: d
-          });
-
-        } catch { }
-      }
-
-      // Load Market Prices
-      async function loadMarket() {
-        try {
-          const r = await fetchTO(MARKET_API + "?state=Jharkhand&district=Ranchi");
-          const d = await r.json();
-
-          const mandi = d.mandis?.[0] || d.mandi;
-          if (mandi) {
-            R.mandiName.textContent = mandi.name;
-            const crop = d.commodities?.grains?.[0];
-            if (crop) R.topCrop.textContent = `${crop.name}: ₹${crop.price}`;
-            R.marketTime.textContent = new Date().toLocaleTimeString();
-          }
-        } catch { }
-      }
-
+      // Load unified database-backed sensor data
       async function refreshAll() {
-        if (await checkESP()) loadESP();
+        try {
+          const json = await loadDashboardData();
+          const d = json.esp || {};
+          const hasSensor = !d.error && d.temperature !== null;
+          R.connText.textContent = hasSensor ? "Connected ✅" : "No sensor data ⚠️";
+
+          if (hasSensor) {
+            R.fieldMoistMain.textContent = (d.moisture_pct ?? "--") + "%";
+            R.motorMain.textContent = d.motor_on ? "ON" : "OFF";
+            R.cropMain.textContent = d.active_crop || d.crop || "--";
+            R.capacityMain.textContent = (d.capacity_pct ?? "--") + "%";
+            R.fireMain.textContent = d.fire_detected ? "🔥 Fire" : "Safe";
+            const t = Number(d.temperature), h = Number(d.humidity);
+            if (Number.isFinite(t) && Number.isFinite(h)) {
+              const score = Math.max(0, Math.round(100 - Math.abs(t - 28) * 2 - Math.abs(h - 60)));
+              R.healthMain.textContent = score + "%";
+            }
+            sendToChatbot({ type: "espData", data: d });
+          } else {
+            R.fieldMoistMain.textContent = "--%"; R.motorMain.textContent = "--";
+            R.capacityMain.textContent = "--%"; R.fireMain.textContent = "No data"; R.healthMain.textContent = "--%";
+          }
+
+          if (json.weather && !json.weather.error) {
+            R.weatherLocation.textContent = json.weather.location || "--";
+            R.weatherTemp.textContent = (json.weather.temperature ?? "--") + " °C";
+            R.weatherHum.textContent = (json.weather.humidity ?? "--") + "%";
+            R.weatherCond.textContent = json.weather.condition || "--";
+            R.weatherWind.textContent = (json.weather.wind_kph ?? "--") + " km/h";
+            R.weatherPressure.textContent = json.weather.pressure_mb ?? "--";
+            R.weatherIcon.src = json.weather.icon || "";
+          }
+          if (json.revenue) R.marketTime.textContent = new Date().toLocaleTimeString();
+        } catch (e) {
+          console.error(e); R.connText.textContent = "Offline ❌";
+        }
         loadMarket();
       }
 
       refreshAll();
       setInterval(refreshAll, 10000);
+
     });
 
     /* --------------------- EMI CALC --------------------- */

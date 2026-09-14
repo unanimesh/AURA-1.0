@@ -25,7 +25,7 @@ $hum  = isset($sensors['humidity']) ? floatval($sensors['humidity']) : null;
 $moist = isset($sensors['moisture_pct']) ? floatval($sensors['moisture_pct']) : null;
 
 // Replace with your OpenAI key to enable AI mode (or set OPENAI_API_KEY env var)
-$OPENAI_KEY = getenv('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') ?: ''; // set in server env is preferred
+$OPENAI_KEY = getenv('OPENAI_API_KEY') ?: ''; // set in server env is preferred
 // Or uncomment to hardcode (not recommended): $OPENAI_KEY = "sk-...";
 
 // Helper: fallback deterministic recommender
